@@ -45,3 +45,6 @@ cursor-memory-bank/
 
 # Docker
 .dockerignore
+
+# Render specific
+.render-buildlogs/

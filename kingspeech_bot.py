@@ -270,6 +270,17 @@ def main():
     """Main function - SYNC runner with internal PTB loop"""
     logger.info("Starting KingSpeech Bot (@kingspeechbot)...")
     logger.info(f"Token: {TELEGRAM_BOT_TOKEN[:10]}...")
+    
+    # Start health check server for Render
+    try:
+        from health_check import start_health_server
+        import threading
+        health_thread = threading.Thread(target=start_health_server, daemon=True)
+        health_thread.start()
+        logger.info("Health check server started")
+    except Exception as e:
+        logger.warning(f"Could not start health check server: {e}")
+    
     try:
         # Load dialog branches (registers in dialog_manager)
         load_all_dialogs()
