@@ -10,10 +10,6 @@ SHEET_NAME = os.getenv("SHEET_NAME", "KingSpeechLeads")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 MANAGER_CHAT_ID = int(os.getenv("MANAGER_CHAT_ID", "0"))
 
-# Настройки для пересылки лидов в бота
-LEADS_BOT_TOKEN = os.getenv("LEADS_BOT_TOKEN")  # Токен бота @kingspeechassistbot
-LEADS_BOT_CHAT_ID = os.getenv("LEADS_BOT_CHAT_ID")  # Chat ID для отправки лидов
-
 # Валидация обязательных переменных
 if not TELEGRAM_BOT_TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN не установлен в переменных окружения")

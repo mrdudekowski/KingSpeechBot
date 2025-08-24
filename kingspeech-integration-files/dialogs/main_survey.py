@@ -10,7 +10,6 @@ from services.dialog_base import BaseDialog
 from services.localization_service import localization
 from services.cached_sheets_service import cached_sheets_service
 from services.validators import input_validator
-from services.leads_sender import leads_sender
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 
 logger = logging.getLogger(__name__)
@@ -29,8 +28,9 @@ class MainSurveyDialog(BaseDialog):
     def entry_point(self, context: Context) -> Step:
         """Entry point for main survey"""
         try:
-            # Reset completion status to allow restart
-            self.set_user_data(context, f"{self.name}_completed", False)
+            # Check if already completed
+            if self.is_completed(context):
+                return self._show_completion_message(context)
             
             # Language already selected in main bot, go directly to greeting
             return self._greeting_step(context)
@@ -342,9 +342,6 @@ class MainSurveyDialog(BaseDialog):
             # Save data to Google Sheets
             self._save_to_sheets(context)
             
-            # Send lead to Telegram bot
-            self._send_lead_to_bot(context)
-            
             # Mark as completed
             self.mark_completed(context)
             
@@ -370,32 +367,6 @@ class MainSurveyDialog(BaseDialog):
             self.get_user_data(context, "start_date")
         ]
         cached_sheets_service.append_user_row(data)
-    
-    def _send_lead_to_bot(self, context: Context) -> None:
-        """Send lead data to Telegram bot"""
-        try:
-            lead_data = {
-                "user_name": self.get_user_data(context, "user_name"),
-                "phone": self.get_user_data(context, "phone"),
-                "level": self.get_user_data(context, "level"),
-                "goals": self.get_user_data(context, "goals"),
-                "format": self.get_user_data(context, "format"),
-                "expectations": self.get_user_data(context, "expectations"),
-                "start_date": self.get_user_data(context, "start_date"),
-                "telegram_id": self.get_user_data(context, "telegram_id"),
-                "telegram_username": self.get_user_data(context, "telegram_username"),
-                "email": "Не указано"  # Email не собирается в опросе
-            }
-            
-            # Send lead to bot
-            success = leads_sender.send_lead_sync(lead_data)
-            if success:
-                logger.info(f"Lead sent to bot successfully for user {self.get_user_data(context, 'telegram_id')}")
-            else:
-                logger.warning(f"Failed to send lead to bot for user {self.get_user_data(context, 'telegram_id')}")
-                
-        except Exception as e:
-            logger.error(f"Error sending lead to bot: {e}")
     
     def _show_completion_message(self, context: Context) -> Step:
         """Show completion message"""
