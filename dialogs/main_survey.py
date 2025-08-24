@@ -29,10 +29,13 @@ class MainSurveyDialog(BaseDialog):
     def entry_point(self, context: Context) -> Step:
         """Entry point for main survey"""
         try:
-            # Reset completion status to allow restart
-            self.set_user_data(context, f"{self.name}_completed", False)
+            # Check if language is already selected
+            lang = self.get_user_data(context, 'interface_lang', None)
+            if not lang:
+                # If no language selected, go to language selection
+                return self._language_selection_step(context)
             
-            # Language already selected in main bot, go directly to greeting
+            # Language already selected, go directly to greeting
             return self._greeting_step(context)
             
         except Exception as e:

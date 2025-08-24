@@ -67,13 +67,15 @@ async def start_command(update, context):
         # Create new context and session
         user_contexts[user.id] = Context(telegram=update.effective_user)
         
-        # Start a temporary session for language selection
-        dialog_manager.start_branch(str(user.id), "language_selection", user_contexts[user.id])
-        
-        await update.message.reply_text(
-            "Пожалуйста, выберите язык интерфейса:",
-            reply_markup=build_language_keyboard(),
-        )
+        # Start the main survey directly - it will handle language selection if needed
+        step = dialog_manager.start_branch(str(user.id), "main_survey", user_contexts[user.id])
+        if step:
+            await send_step_message(update, context, step)
+        else:
+            await update.message.reply_text(
+                "Пожалуйста, выберите язык интерфейса:",
+                reply_markup=build_language_keyboard(),
+            )
         logger.info("Start command reply sent successfully")
     except Exception as e:
         logger.error(f"Error sending start reply: {e}")
@@ -222,7 +224,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         current_context.set_variable("interface_lang", lang)
         
-        # Directly start the main survey instead of showing menu
+        # End the language selection branch and start main survey
+        dialog_manager.end_branch(str(user.id))
         step = dialog_manager.start_branch(str(user.id), "main_survey", current_context)
         if step:
             await send_step_message(update, context, step)
@@ -266,6 +269,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         except Exception as e:
             logger.error(f"Error in next_step(callback): {e}")
+            # Don't end the dialog on error, just show error message
+            await query.message.reply_text("Произошла ошибка. Пожалуйста, попробуйте еще раз.")
+            return
+
+    # If no pending step, try to get the current step from the branch
+    try:
+        step = branch.entry_point(current_context)
+        if step:
+            await send_step_message(update, context, step)
+            return
+    except Exception as e:
+        logger.error(f"Error getting branch entry point: {e}")
 
     # Fallback - if no pending step and no branch entry point, end the dialog
     dialog_manager.end_branch(str(user.id))
