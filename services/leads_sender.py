@@ -1,94 +1,75 @@
 """
-Leads Sender Service for KingSpeech Bot
-Sends lead data to another Telegram bot for processing
+Сервис для отправки лидов в чат рабочей группы
 """
-
-import logging
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from telegram import Bot
-from config import LEADS_BOT_TOKEN, LEADS_BOT_CHAT_ID
+from config import WORKGROUP_CHAT_ID, TELEGRAM_BOT_TOKEN
 
-logger = logging.getLogger(__name__)
 
 class LeadsSenderService:
-    """Service for sending leads to Telegram bot"""
+    """Сервис для отправки лидов в чат рабочей группы"""
     
     def __init__(self):
-        self.bot_token = LEADS_BOT_TOKEN
-        self.chat_id = LEADS_BOT_CHAT_ID
-        self.bot = None
-        
-        if self.bot_token and self.chat_id:
-            self.bot = Bot(token=self.bot_token)
-            logger.info("LeadsSenderService initialized")
-        else:
-            logger.warning("LeadsSenderService not configured - missing token or chat_id")
+        self.bot = Bot(token=TELEGRAM_BOT_TOKEN)
+        self.workgroup_chat_id = WORKGROUP_CHAT_ID
     
     def format_lead_message(self, lead_data: Dict[str, Any]) -> str:
-        """Format lead data into a structured message"""
-        try:
-            message = f"""🎯 **Новая заявка: KingSpeech**
-
-👤 **Имя:** {lead_data.get('user_name', 'Не указано')}
-📧 **Email:** {lead_data.get('email', 'Не указано')}
-📱 **Телефон:** {lead_data.get('phone', 'Не указано')}
-💬 **Мессенджер:** Telegram
-🌐 **Страница:** https://t.me/kingspeechbot
-🔗 **Реферер:** @kingspeechbot
-
-📊 **Детали заявки:**
-• **Уровень:** {lead_data.get('level', 'Не указано')}
-• **Цель:** {lead_data.get('goals', 'Не указано')}
-• **Формат:** {lead_data.get('format', 'Не указано')}
-• **Ожидания:** {lead_data.get('expectations', 'Не указано')}
-• **Дата начала:** {lead_data.get('start_date', 'Не указано')}
-
-🆔 **Telegram ID:** {lead_data.get('telegram_id', 'Не указано')}
-👤 **Username:** {lead_data.get('telegram_username', 'Не указано')}"""
-            
-            return message
-            
-        except Exception as e:
-            logger.error(f"Error formatting lead message: {e}")
-            return f"Ошибка форматирования заявки: {e}"
+        """Форматирует данные лида в сообщение для отправки"""
+        message = "🔥 НОВЫЙ ЛИД С БОТА @kingspeechbot\n\n"
+        
+        # Основная информация
+        message += f"👤 Имя: {lead_data.get('name', 'Не указано')}\n"
+        message += f"📱 Телефон: {lead_data.get('phone', 'Не указан')}\n"
+        message += f"🌍 Язык: {lead_data.get('language', 'Не указан')}\n"
+        
+        # Дополнительная информация
+        if lead_data.get('age'):
+            message += f"📅 Возраст: {lead_data['age']}\n"
+        if lead_data.get('experience'):
+            message += f"📚 Опыт изучения: {lead_data['experience']}\n"
+        if lead_data.get('goals'):
+            message += f"🎯 Цели: {lead_data['goals']}\n"
+        if lead_data.get('schedule'):
+            message += f"⏰ Предпочитаемое время: {lead_data['schedule']}\n"
+        
+        # Временная метка
+        if lead_data.get('timestamp'):
+            message += f"\n📅 Получен: {lead_data['timestamp']}"
+        
+        return message
     
     async def send_lead(self, lead_data: Dict[str, Any]) -> bool:
-        """Send lead data to the configured bot"""
-        if not self.bot or not self.chat_id:
-            logger.warning("Cannot send lead - bot not configured")
-            return False
-        
+        """Асинхронно отправляет лид в чат рабочей группы"""
         try:
+            if not self.workgroup_chat_id:
+                print("⚠️ WORKGROUP_CHAT_ID не установлен - лид не отправлен в чат")
+                return False
+            
             message = self.format_lead_message(lead_data)
             
             await self.bot.send_message(
-                chat_id=self.chat_id,
+                chat_id=self.workgroup_chat_id,
                 text=message,
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
             
-            logger.info(f"Lead sent successfully to {self.chat_id}")
+            print(f"✅ Лид успешно отправлен в чат рабочей группы")
             return True
             
         except Exception as e:
-            logger.error(f"Error sending lead: {e}")
+            print(f"❌ Ошибка отправки лида в чат: {e}")
             return False
     
     def send_lead_sync(self, lead_data: Dict[str, Any]) -> bool:
-        """Synchronous wrapper for send_lead"""
+        """Синхронная обертка для отправки лида"""
         try:
             loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're already in an async context, create a new task
-                asyncio.create_task(self.send_lead(lead_data))
-                return True
-            else:
-                # If no loop is running, run the async function
-                return asyncio.run(self.send_lead(lead_data))
-        except Exception as e:
-            logger.error(f"Error in send_lead_sync: {e}")
-            return False
+            return loop.run_until_complete(self.send_lead(lead_data))
+        except RuntimeError:
+            # Если нет активного event loop, создаем новый
+            return asyncio.run(self.send_lead(lead_data))
 
-# Global instance
+
+# Синглтон экземпляр сервиса
 leads_sender = LeadsSenderService()

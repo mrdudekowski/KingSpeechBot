@@ -372,30 +372,33 @@ class MainSurveyDialog(BaseDialog):
         cached_sheets_service.append_user_row(data)
     
     def _send_lead_to_bot(self, context: Context) -> None:
-        """Send lead data to Telegram bot"""
+        """Send lead data to workgroup chat"""
         try:
+            from datetime import datetime
+            
             lead_data = {
-                "user_name": self.get_user_data(context, "user_name"),
+                "name": self.get_user_data(context, "user_name"),
                 "phone": self.get_user_data(context, "phone"),
+                "language": "English",  # Fixed for English school
                 "level": self.get_user_data(context, "level"),
                 "goals": self.get_user_data(context, "goals"),
                 "format": self.get_user_data(context, "format"),
                 "expectations": self.get_user_data(context, "expectations"),
-                "start_date": self.get_user_data(context, "start_date"),
+                "schedule": self.get_user_data(context, "start_date"),
                 "telegram_id": self.get_user_data(context, "telegram_id"),
                 "telegram_username": self.get_user_data(context, "telegram_username"),
-                "email": "Не указано"  # Email не собирается в опросе
+                "timestamp": datetime.now().strftime("%d.%m.%Y %H:%M")
             }
             
-            # Send lead to bot
+            # Send lead to workgroup chat
             success = leads_sender.send_lead_sync(lead_data)
             if success:
-                logger.info(f"Lead sent to bot successfully for user {self.get_user_data(context, 'telegram_id')}")
+                logger.info(f"Lead sent to workgroup chat successfully for user {self.get_user_data(context, 'telegram_id')}")
             else:
-                logger.warning(f"Failed to send lead to bot for user {self.get_user_data(context, 'telegram_id')}")
+                logger.warning(f"Failed to send lead to workgroup chat for user {self.get_user_data(context, 'telegram_id')}")
                 
         except Exception as e:
-            logger.error(f"Error sending lead to bot: {e}")
+            logger.error(f"Error sending lead to workgroup chat: {e}")
     
     def _show_completion_message(self, context: Context) -> Step:
         """Show completion message"""
