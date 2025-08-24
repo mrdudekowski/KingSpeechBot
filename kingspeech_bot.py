@@ -57,9 +57,19 @@ async def start_command(update, context):
     logger.info(f"User: {user.first_name} {user.last_name} (@{user.username})")
     
     try:
-        # First: ask for interface language
-        if user.id not in user_contexts:
-            user_contexts[user.id] = Context(telegram=update.effective_user)
+        # Reset any existing session
+        dialog_manager.reset_user(str(user.id))
+        if user.id in user_contexts:
+            user_contexts.pop(user.id, None)
+        if user.id in user_next_step:
+            user_next_step.pop(user_id, None)
+        
+        # Create new context and session
+        user_contexts[user.id] = Context(telegram=update.effective_user)
+        
+        # Start a temporary session for language selection
+        dialog_manager.start_branch(str(user.id), "language_selection", user_contexts[user.id])
+        
         await update.message.reply_text(
             "Пожалуйста, выберите язык интерфейса:",
             reply_markup=build_language_keyboard(),
@@ -139,6 +149,13 @@ async def handle_message(update, context):
     else:
         current_context.set_user_message(text)
 
+    # Check if user has an active dialog session (started with /start)
+    active_branch = dialog_manager.get_active_branch(str(user.id))
+    if not active_branch:
+        # No active session - ignore message (don't respond)
+        logger.info(f"User {user.id} has no active session - ignoring message")
+        return
+
     # If we have a pending step, route to it
     next_step = user_next_step.get(user.id)
     if next_step:
@@ -149,15 +166,15 @@ async def handle_message(update, context):
         except Exception as e:
             logger.error(f"Error in next_step: {e}")
 
-    # Otherwise: route to active branch or prompt /start
-    active_branch = dialog_manager.get_active_branch(str(user.id))
-    if active_branch:
-        branch = dialog_manager.get_branch(active_branch)
-        if branch:
-            step = branch.entry_point(current_context)
-            await send_step_message(update, context, step)
-            return
-    await update.message.reply_text("Отправьте /start, чтобы начать диалог.")
+    # Route to active branch
+    branch = dialog_manager.get_branch(active_branch)
+    if branch:
+        step = branch.entry_point(current_context)
+        await send_step_message(update, context, step)
+    else:
+        # Clean up invalid state
+        dialog_manager.end_branch(str(user.id))
+        await update.message.reply_text("Сессия завершена. Отправьте /start, чтобы начать новый диалог.")
 
 async def error_handler(update, context):
     """Handle errors"""
@@ -178,8 +195,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = query.data or ""
     logger.info(f"Received callback from user {user.id}: {data}")
 
-    # Language selection
+    # Language selection (only allowed if user has started with /start)
     if data.startswith("set_lang|"):
+        # Check if user has an active session
+        active_branch = dialog_manager.get_active_branch(str(user.id))
+        if not active_branch:
+            await query.message.reply_text("Отправьте /start, чтобы начать диалог.")
+            return
+            
         lang = data.split("|", 1)[1]
         if lang not in ("ru", "en"):
             await query.message.reply_text("Неизвестный язык.")
@@ -194,8 +217,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.message.reply_text("Произошла ошибка при запуске опроса.")
         return
 
-    # Start specific branch
+    # Start specific branch (only allowed if user has started with /start)
     if data.startswith("start_branch|"):
+        # Check if user has an active session
+        active_branch = dialog_manager.get_active_branch(str(user.id))
+        if not active_branch:
+            await query.message.reply_text("Отправьте /start, чтобы начать диалог.")
+            return
+            
         branch_name = data.split("|", 1)[1]
         step = dialog_manager.start_branch(str(user.id), branch_name, current_context)
         if step:
