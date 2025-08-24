@@ -69,9 +69,10 @@ async def start_command(update, context):
         
         # Start the main survey directly - it will handle language selection if needed
         step = dialog_manager.start_branch(str(user.id), "main_survey", user_contexts[user.id])
-        if step:
+        if step and step.next_step is not None:
             await send_step_message(update, context, step)
         else:
+            # Language not selected, show language selection
             await update.message.reply_text(
                 "Пожалуйста, выберите язык интерфейса:",
                 reply_markup=build_language_keyboard(),
@@ -171,14 +172,19 @@ async def handle_message(update, context):
         return
 
     # If we have a pending step, route to it
-    next_step = user_next_step.get(user.id)
     if next_step:
         try:
             step = next_step(current_context, choice=text or (contact.phone_number if contact else None))
-            await send_step_message(update, context, step)
-            return
+            if step and hasattr(step, 'message') and step.message:
+                await send_step_message(update, context, step)
+                return
+            else:
+                logger.warning(f"next_step returned invalid step for user {user.id}")
         except Exception as e:
             logger.error(f"Error in next_step: {e}")
+            # Don't end the dialog on error, just show error message
+            await update.message.reply_text("Произошла ошибка. Пожалуйста, попробуйте еще раз или отправьте /start для перезапуска.")
+            return
 
     # Route to active branch - only if we don't have a pending step
     branch = dialog_manager.get_branch(active_branch)
@@ -224,11 +230,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         current_context.set_variable("interface_lang", lang)
         
-        # End the language selection branch and start main survey
-        dialog_manager.end_branch(str(user.id))
-        step = dialog_manager.start_branch(str(user.id), "main_survey", current_context)
-        if step:
-            await send_step_message(update, context, step)
+        # Continue with the main survey - don't end and restart the branch
+        branch = dialog_manager.get_branch(active_branch)
+        if branch:
+            try:
+                step = branch.entry_point(current_context)
+                if step:
+                    await send_step_message(update, context, step)
+                else:
+                    await query.message.reply_text("Произошла ошибка при запуске опроса.")
+            except Exception as e:
+                logger.error(f"Error in branch entry point: {e}")
+                await query.message.reply_text("Произошла ошибка при запуске опроса.")
         else:
             await query.message.reply_text("Произошла ошибка при запуске опроса.")
         return
@@ -276,9 +289,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # If no pending step, try to get the current step from the branch
     try:
         step = branch.entry_point(current_context)
-        if step:
+        if step and hasattr(step, 'message') and step.message:
             await send_step_message(update, context, step)
             return
+        else:
+            logger.warning(f"Branch entry point returned invalid step for user {user.id}")
     except Exception as e:
         logger.error(f"Error getting branch entry point: {e}")
 
@@ -288,8 +303,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def send_step_message(update: Update, context: ContextTypes.DEFAULT_TYPE, step: Step) -> None:
     """Render a Step to Telegram with optional inline/reply keyboards"""
+    if not step or not hasattr(step, 'message'):
+        logger.error("Invalid step object received")
+        return
+        
     reply_markup = getattr(step, 'reply_markup', None)
     options = getattr(step, 'options', None)
+    
     # Persist next_step for progression
     user_id = (update.effective_user.id if update.effective_user else None)
     if user_id is not None:

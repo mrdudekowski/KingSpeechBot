@@ -32,8 +32,9 @@ class MainSurveyDialog(BaseDialog):
             # Check if language is already selected
             lang = self.get_user_data(context, 'interface_lang', None)
             if not lang:
-                # If no language selected, go to language selection
-                return self._language_selection_step(context)
+                # If no language selected, show language selection message
+                # This should be handled by the main bot, not here
+                return self.create_step("Пожалуйста, выберите язык интерфейса.", next_step=None)
             
             # Language already selected, go directly to greeting
             return self._greeting_step(context)
@@ -41,22 +42,7 @@ class MainSurveyDialog(BaseDialog):
         except Exception as e:
             return self.handle_error(context, e, "Произошла ошибка. Пожалуйста, начните сначала.")
     
-    def _language_selection_step(self, context: Context) -> Step:
-        """Language selection step"""
-        lang = self.get_user_data(context, 'interface_lang', 'ru')
-        message = localization.t('choose_language', lang)
-        options = ['🇷🇺 Русский', '🇬🇧 English']
-        return self.create_step(message, next_step=self._process_language_selection, options=options)
-    
-    def _process_language_selection(self, context: Context, choice: str = None) -> Step:
-        """Process language selection"""
-        if choice:
-            if choice == '🇷🇺 Русский':
-                self.set_user_data(context, 'interface_lang', 'ru')
-            elif choice == '🇬🇧 English':
-                self.set_user_data(context, 'interface_lang', 'en')
-        
-        return self._greeting_step(context)
+
     
     def _greeting_step(self, context: Context) -> Step:
         """Greeting step"""
