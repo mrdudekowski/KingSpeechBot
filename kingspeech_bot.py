@@ -155,6 +155,18 @@ async def handle_message(update, context):
         # No active session - ignore message (don't respond)
         logger.info(f"User {user.id} has no active session - ignoring message")
         return
+    
+    # Check if dialog is completed (no next_step)
+    next_step = user_next_step.get(user.id)
+    if next_step is None:
+        # Dialog is completed - clean up and ignore message
+        logger.info(f"User {user.id} dialog completed - cleaning up session")
+        dialog_manager.end_branch(str(user.id))
+        if user.id in user_contexts:
+            user_contexts.pop(user.id, None)
+        if user.id in user_next_step:
+            user_next_step.pop(user.id, None)
+        return
 
     # If we have a pending step, route to it
     next_step = user_next_step.get(user.id)
@@ -166,11 +178,12 @@ async def handle_message(update, context):
         except Exception as e:
             logger.error(f"Error in next_step: {e}")
 
-    # Route to active branch
+    # Route to active branch - only if we don't have a pending step
     branch = dialog_manager.get_branch(active_branch)
     if branch:
-        step = branch.entry_point(current_context)
-        await send_step_message(update, context, step)
+        # Don't call entry_point again - let the dialog handle the current step
+        # Just send a message to continue the dialog
+        await update.message.reply_text("Пожалуйста, продолжите диалог или отправьте /start для перезапуска.")
     else:
         # Clean up invalid state
         dialog_manager.end_branch(str(user.id))
@@ -254,13 +267,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except Exception as e:
             logger.error(f"Error in next_step(callback): {e}")
 
-    # Fallback to active branch entry point
-    step = branch.entry_point(current_context)
-    if step:
-        await send_step_message(update, context, step)
-    else:
-        dialog_manager.end_branch(str(user.id))
-        await query.message.reply_text("Диалог завершен. Используйте /start для нового диалога.")
+    # Fallback - if no pending step and no branch entry point, end the dialog
+    dialog_manager.end_branch(str(user.id))
+    await query.message.reply_text("Диалог завершен. Используйте /start для нового диалога.")
 
 async def send_step_message(update: Update, context: ContextTypes.DEFAULT_TYPE, step: Step) -> None:
     """Render a Step to Telegram with optional inline/reply keyboards"""
@@ -269,7 +278,13 @@ async def send_step_message(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     # Persist next_step for progression
     user_id = (update.effective_user.id if update.effective_user else None)
     if user_id is not None:
-        user_next_step[user_id] = getattr(step, 'next_step', None)
+        next_step = getattr(step, 'next_step', None)
+        user_next_step[user_id] = next_step
+        
+        # If no next_step, the dialog is completed - clean up
+        if next_step is None:
+            logger.info(f"Dialog completed for user {user_id} - cleaning up")
+            # Don't immediately end the branch here, let the user see the completion message
 
     # If it's a reply keyboard, always send new message
     if isinstance(reply_markup, ReplyKeyboardMarkup):

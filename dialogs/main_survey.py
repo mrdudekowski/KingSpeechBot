@@ -406,6 +406,10 @@ class MainSurveyDialog(BaseDialog):
         user_name = self.get_user_data(context, 'user_name', '')
         message = localization.t('thanks', lang, user_name=user_name)
         
+        # Mark dialog as completed and end the branch
+        self.mark_completed(context)
+        
+        # Return final step with no next_step to end the dialog
         return self.create_step(message, next_step=None)
     
     def _get_progress_bar(self, current: int, total: int, length: int = 8) -> str:
