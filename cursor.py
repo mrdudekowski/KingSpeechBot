@@ -60,12 +60,28 @@ class GoogleSheets:
 
     def _get_service(self):
         try:
-            # Создаем учетные данные из Service Account
-            creds = service_account.Credentials.from_service_account_file(
-                'service-account.json',
-                scopes=self.SCOPES
-            )
-            logger.debug("Successfully created credentials from service account")
+            import os
+            import json
+            
+            # Пытаемся получить credentials из переменной окружения
+            google_credentials = os.getenv('GOOGLE_CREDENTIALS')
+            
+            if google_credentials:
+                # Парсим JSON из переменной окружения
+                creds_info = json.loads(google_credentials)
+                creds = service_account.Credentials.from_service_account_info(
+                    creds_info,
+                    scopes=self.SCOPES
+                )
+                logger.debug("Successfully created credentials from environment variable")
+            else:
+                # Fallback к файлу (для локальной разработки)
+                creds = service_account.Credentials.from_service_account_file(
+                    'service-account.json',
+                    scopes=self.SCOPES
+                )
+                logger.debug("Successfully created credentials from service account file")
+            
             return build('sheets', 'v4', credentials=creds)
         except Exception as e:
             logger.error(f"Error in _get_service: {str(e)}", exc_info=True)
